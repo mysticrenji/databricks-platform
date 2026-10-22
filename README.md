@@ -1,5 +1,8 @@
 # Databricks Platform Engineering
 
+[![Platform validation](https://github.com/mysticrenji/databricks-platform/actions/workflows/environment-validation.yml/badge.svg)](https://github.com/mysticrenji/databricks-platform/actions/workflows/environment-validation.yml)
+[![Environment provisioning](https://github.com/mysticrenji/databricks-platform/actions/workflows/environment-provision.yml/badge.svg)](https://github.com/mysticrenji/databricks-platform/actions/workflows/environment-provision.yml)
+
 Infrastructure and configuration for building and operating a Databricks platform
 on AWS with Terraform, Python, and GitHub Actions.
 
