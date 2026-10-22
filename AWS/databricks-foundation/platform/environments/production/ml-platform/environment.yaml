@@ -1,0 +1,29 @@
+version: 2
+workspace:
+  name: ml-platform
+environment:
+  name: production
+  aws_account_id: "111111111111"
+  aws_region: eu-west-1
+  deployment_role_arn: arn:aws:iam::111111111111:role/replace-me-terraform
+databricks:
+  account_id: "00000000-0000-0000-0000-000000000000"
+  pricing_tier: PREMIUM
+network:
+  nat_gateway_mode: per_az
+  vpc_cidr: 10.62.0.0/16
+  workspace_subnets:
+    a: {availability_zone: eu-west-1a, cidr_block: 10.62.0.0/20}
+    b: {availability_zone: eu-west-1b, cidr_block: 10.62.16.0/20}
+  nat_subnets:
+    a: {availability_zone: eu-west-1a, cidr_block: 10.62.32.0/24}
+    b: {availability_zone: eu-west-1b, cidr_block: 10.62.33.0/24}
+  workspace_subnet_nat_gateway_keys: {a: a, b: b}
+  endpoint_subnets:
+    a: {availability_zone: eu-west-1a, cidr_block: 10.62.34.0/24}
+    b: {availability_zone: eu-west-1b, cidr_block: 10.62.35.0/24}
+storage:
+  workspace_bucket_name: replace-me-acme-production-ml-platform-workspace
+features:
+  customer_managed_kms: false
+  observability: true

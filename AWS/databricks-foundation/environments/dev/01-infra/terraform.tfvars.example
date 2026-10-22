@@ -1,0 +1,71 @@
+aws_region     = "eu-central-1"
+vpc_cidr_block = "10.20.0.0/16"
+
+
+# Find this in the Databricks account console before applying.
+databricks_account_id = "REPLACE_WITH_DATABRICKS_ACCOUNT_ID"
+
+# S3 bucket names are global; use an organization-owned unique suffix.
+root_storage_bucket_name = "REPLACE_WITH_UNIQUE_ROOT_BUCKET_NAME"
+
+# Keep false for the SSE-S3 baseline. When true, set aws_account_id as well.
+enable_customer_managed_kms = false
+aws_account_id              = null
+
+workspace_subnets = {
+  az1 = {
+    availability_zone = "eu-central-1a"
+    cidr_block        = "10.20.0.0/20"
+  }
+  az2 = {
+    availability_zone = "eu-central-1b"
+    cidr_block        = "10.20.16.0/20"
+  }
+}
+
+nat_subnets = {
+  az1 = {
+    availability_zone = "eu-central-1a"
+    cidr_block        = "10.20.240.0/24"
+  }
+  az2 = {
+    availability_zone = "eu-central-1b"
+    cidr_block        = "10.20.241.0/24"
+  }
+}
+
+workspace_subnet_nat_gateway_keys = {
+  az1 = "az1"
+  az2 = "az2"
+}
+
+enable_privatelink = false
+enable_fips        = false
+
+endpoint_subnets = {
+  az1 = {
+    availability_zone = "eu-central-1a"
+    cidr_block        = "10.20.242.0/24"
+  }
+  az2 = {
+    availability_zone = "eu-central-1b"
+    cidr_block        = "10.20.243.0/24"
+  }
+}
+
+# Optional Kinesis Data Stream. The Databricks compute instance-profile role
+# receives read-only consumer permissions for this one stream.
+# kinesis_stream = {
+#   name                   = "databricks-dev-events"
+#   retention_period_hours = 24
+# }
+
+# CloudWatch dashboard and NAT alarms. SNS topics/subscriptions are managed separately.
+enable_observability = true
+observability_alarm_action_arns = []
+# Optional billable S3 request/transfer metrics:
+observability_s3_request_metrics = false
+observability_ebs_volume_ids = {}
+# Optional dedicated UC managed operations/logs bucket.
+enable_observability_bucket = false
+observability_bucket_name = null

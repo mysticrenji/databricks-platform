@@ -1,0 +1,47 @@
+state_bucket      = "REPLACE_WITH_TERRAFORM_STATE_BUCKET"
+state_region      = "eu-central-1"
+infra_state_key   = "databricks/dev/shared/01-infra.tfstate"
+account_state_key = "databricks/dev/shared/02-account.tfstate"
+
+# Optional: create bronze/silver/gold schemas and an ingestion.incoming volume.
+# Keep null to create only roles, storage credentials, and external locations.
+catalog_name = null
+
+# Optional catalog grants; requires a non-null catalog_name.
+# This map manages all explicit grants on that catalog. Include all intended principals.
+catalog_grants = {}
+# catalog_grants = {
+#   "databricks-dev-admins" = ["BROWSE", "USE_CATALOG"]
+# }
+
+# Schema names: bronze, silver, gold, ingestion. Maps are authoritative per object.
+schema_grants = {}
+# schema_grants = {
+#   gold = { "databricks-dev-reader" = ["USE_SCHEMA", "SELECT"] }
+# }
+incoming_volume_grants = {}
+# incoming_volume_grants = {
+#   "databricks-dev-developer" = ["READ_VOLUME", "WRITE_VOLUME"]
+# }
+# Requires enable_observability_bucket=true applied in 01-infra.
+observability = null
+# observability = {
+#   catalog_name = "dev_operations"
+#   catalog_grants = {
+#     "databricks-dev-admins" = ["ALL_PRIVILEGES", "MANAGE"]
+#     "databricks-dev-developer" = ["BROWSE", "USE_CATALOG"]
+#   }
+#   schema_grants = { "databricks-dev-developer" = ["USE_SCHEMA"] }
+#   volume_grants = { "databricks-dev-developer" = ["READ_VOLUME", "WRITE_VOLUME"] }
+# }
+# Requires observability and parent USE_CATALOG/USE_SCHEMA grants for readers.
+enable_init_scripts_volume = false
+init_script_readers = []
+
+# Regional Unity Catalog setup and optional additional data objects.
+databricks_account_id = "REPLACE_WITH_DATABRICKS_ACCOUNT_ID"
+create_metastore = false
+metastore_name = "databricks-dev-eu-central-1"
+existing_metastore_id = ""
+external_locations = {}
+catalogs = {}

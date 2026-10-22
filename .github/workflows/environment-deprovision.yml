@@ -1,0 +1,94 @@
+name: Deprovision environment YAML
+on:
+  workflow_dispatch:
+    inputs:
+      target_workspace:
+        description: Workspace identifier within the environment (for example shared or sandbox)
+        type: string
+        default: shared
+        required: true
+      target_environment:
+        description: Environment to deprovision
+        type: choice
+        options: [dev, staging]
+        default: dev
+      execute_destroy:
+        description: Destroy after preview (dev/demo requires single-admin confirmation)
+        type: boolean
+        default: false
+      purge_storage:
+        description: Permanently delete workspace S3 buckets and all versions after teardown (KMS and state retained)
+        type: boolean
+        default: false
+      confirm_purge_storage:
+        description: For permanent storage deletion, type environment/workspace again (for example dev/demo)
+        type: string
+        default: ''
+      confirm_environment:
+        description: For execution, type environment/workspace exactly (for example dev/sandbox)
+        type: string
+        default: ''
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+concurrency:
+  group: databricks-environment-${{ inputs.target_environment }}-${{ inputs.target_workspace }}
+  cancel-in-progress: false
+jobs:
+  workspace_compute:
+    if: >-
+      !cancelled() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' &&
+      inputs.target_environment == 'dev' && inputs.target_workspace == 'demo'
+    uses: ./.github/workflows/environment-compute.yml
+    with:
+      target_environment: ${{ inputs.target_environment }}
+      target_workspace: ${{ inputs.target_workspace }}
+      deploy: ${{ inputs.execute_destroy }}
+      retire: true
+      confirm_environment: ${{ inputs.confirm_environment }}
+    secrets: inherit
+  workspace_access:
+    needs: workspace_compute
+    if: >-
+      !cancelled() && (needs.workspace_compute.result == 'success' || needs.workspace_compute.result == 'skipped') &&
+      github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' &&
+      inputs.target_environment == 'dev' && inputs.target_workspace == 'demo'
+    uses: ./.github/workflows/environment-workspace-access.yml
+    with:
+      target_environment: ${{ inputs.target_environment }}
+      target_workspace: ${{ inputs.target_workspace }}
+      deploy: ${{ inputs.execute_destroy }}
+      retire: true
+      confirm_environment: ${{ inputs.confirm_environment }}
+    secrets: inherit
+  account:
+    needs: workspace_access
+    # A demo preview must not claim that groups can be removed while compute or features are managed.
+    if: >-
+      !cancelled() && (needs.workspace_access.result == 'success' || needs.workspace_access.result == 'skipped') &&
+      (inputs.execute_destroy || inputs.target_environment != 'dev' || inputs.target_workspace != 'demo') &&
+      (inputs.target_environment != 'dev' || inputs.target_workspace != 'demo' || (github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'))
+    uses: ./.github/workflows/environment-destroy-root.yml
+    with:
+      root: 02-account
+      target_environment: ${{ inputs.target_environment }}
+      target_workspace: ${{ inputs.target_workspace }}
+      execute_destroy: ${{ inputs.execute_destroy }}
+      purge_storage: ${{ inputs.purge_storage }}
+      confirm_purge_storage: ${{ inputs.confirm_purge_storage }}
+      confirm_environment: ${{ inputs.confirm_environment }}
+    secrets: inherit
+  infra:
+    if: ${{ !cancelled() && inputs.execute_destroy && needs.account.result == 'success' }}
+    needs: account
+    uses: ./.github/workflows/environment-destroy-root.yml
+    with:
+      root: 01-infra
+      target_environment: ${{ inputs.target_environment }}
+      target_workspace: ${{ inputs.target_workspace }}
+      execute_destroy: ${{ inputs.execute_destroy }}
+      purge_storage: ${{ inputs.purge_storage }}
+      confirm_purge_storage: ${{ inputs.confirm_purge_storage }}
+      confirm_environment: ${{ inputs.confirm_environment }}
+    secrets: inherit

@@ -1,0 +1,746 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ADR 0005 dev/demo offline contract",
+  "$defs": {
+    "roles": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "packages": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "catalog": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "USE_CATALOG"
+                  ]
+                },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              "schema": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "USE_SCHEMA",
+                    "SELECT",
+                    "MODIFY",
+                    "CREATE_TABLE"
+                  ]
+                },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              "table": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "SELECT",
+                    "MODIFY"
+                  ]
+                },
+                "minItems": 1,
+                "uniqueItems": true
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "minProperties": 1
+        },
+        "personas": {
+          "type": "object",
+          "properties": {
+            "admins": {
+              "$ref": "#/$defs/persona"
+            },
+            "engineers": {
+              "$ref": "#/$defs/persona"
+            },
+            "analysts": {
+              "$ref": "#/$defs/persona"
+            },
+            "ml": {
+              "$ref": "#/$defs/persona"
+            }
+          },
+          "required": [
+            "admins",
+            "engineers",
+            "analysts",
+            "ml"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "packages",
+        "personas"
+      ],
+      "additionalProperties": false
+    },
+    "principals": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "environment": {
+          "const": "dev"
+        },
+        "workspace": {
+          "const": "demo"
+        },
+        "groups": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "display_name": {
+                "type": "string",
+                "pattern": "^dev-demo-[a-z][a-z0-9-]*$",
+                "maxLength": 255
+              },
+              "persona": {
+                "enum": [
+                  "admins",
+                  "engineers",
+                  "analysts",
+                  "ml"
+                ]
+              },
+              "lifecycle": {
+                "enum": [
+                  "create",
+                  "external",
+                  "terraform"
+                ]
+              },
+              "account_group_id": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]*$"
+              }
+            },
+            "required": [
+              "display_name",
+              "persona",
+              "lifecycle"
+            ],
+            "additionalProperties": false
+          },
+          "minProperties": 1
+        }
+      },
+      "required": [
+        "version",
+        "environment",
+        "workspace",
+        "groups"
+      ],
+      "additionalProperties": false
+    },
+    "resources": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "environment": {
+          "const": "dev"
+        },
+        "workspace": {
+          "const": "demo"
+        },
+        "datasets": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "approval_owner": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+                "maxLength": 63
+              },
+              "schemas": {
+                "type": "object",
+                "propertyNames": {
+                  "pattern": "^[a-z][a-z0-9_]*$"
+                },
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "allowed_packages": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+                        "maxLength": 63
+                      },
+                      "minItems": 1,
+                      "uniqueItems": true
+                    }
+                  },
+                  "required": [
+                    "allowed_packages"
+                  ],
+                  "additionalProperties": false
+                },
+                "minProperties": 1
+              }
+            },
+            "required": [
+              "approval_owner",
+              "schemas"
+            ],
+            "additionalProperties": false
+          },
+          "minProperties": 1
+        },
+        "workloads": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "allowed_catalogs": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 255
+                },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              "principal": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+                "maxLength": 63
+              }
+            },
+            "required": [
+              "principal",
+              "allowed_catalogs"
+            ],
+            "additionalProperties": false
+          },
+          "minProperties": 1
+        }
+      },
+      "required": [
+        "version",
+        "environment",
+        "workspace",
+        "datasets",
+        "workloads"
+      ],
+      "additionalProperties": false
+    },
+    "reviewers": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "platform_reviewers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*(?:/[A-Za-z0-9][A-Za-z0-9-]*)?$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "data_owners": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*(?:/[A-Za-z0-9][A-Za-z0-9-]*)?$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "minProperties": 1
+        }
+      },
+      "required": [
+        "version",
+        "platform_reviewers",
+        "data_owners"
+      ],
+      "additionalProperties": false
+    },
+    "target": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "environment": {
+          "const": "dev"
+        },
+        "workspace": {
+          "const": "demo"
+        },
+        "account_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        },
+        "workspace_url": {
+          "type": "string",
+          "pattern": "^https://[a-z0-9-]+\\.(?:cloud\\.databricks\\.com|[a-z0-9-]+\\.databricks\\.com)$"
+        },
+        "metastore_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "active": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "version",
+        "environment",
+        "workspace",
+        "account_id",
+        "workspace_id",
+        "workspace_url",
+        "metastore_id",
+        "active"
+      ],
+      "additionalProperties": false
+    },
+    "runtime": {
+      "type": "object",
+      "properties": {
+        "allowed_versions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]+\\.x-(?:cpu-ml-)?scala2\\.[0-9]+$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "default_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "allowed_versions",
+        "default_version"
+      ],
+      "additionalProperties": false
+    },
+    "nodes": {
+      "type": "object",
+      "properties": {
+        "allowed_types": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[mrc][0-9][a-z]*\\.(?:large|xlarge|[1-9][0-9]*xlarge)$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "default_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "allowed_types",
+        "default_type"
+      ],
+      "additionalProperties": false
+    },
+    "compute": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "environment": {
+          "const": "dev"
+        },
+        "cluster_policies": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "runtime": {
+                "$ref": "#/$defs/runtime"
+              },
+              "worker_nodes": {
+                "$ref": "#/$defs/nodes"
+              },
+              "driver_nodes": {
+                "$ref": "#/$defs/nodes"
+              },
+              "autoscaling": {
+                "type": "object",
+                "properties": {
+                  "min_workers": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "max_workers": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "min_workers",
+                  "max_workers"
+                ],
+                "additionalProperties": false
+              },
+              "autotermination_minutes": {
+                "type": "integer",
+                "minimum": 10
+              },
+              "max_clusters_per_user": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "data_security_mode": {
+                "enum": [
+                  "USER_ISOLATION",
+                  "SINGLE_USER"
+                ]
+              }
+            },
+            "required": [
+              "description",
+              "runtime",
+              "worker_nodes",
+              "driver_nodes",
+              "autoscaling",
+              "autotermination_minutes",
+              "max_clusters_per_user",
+              "data_security_mode"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "sql_warehouses": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "size": {
+                "enum": [
+                  "2X-Small",
+                  "X-Small",
+                  "Small",
+                  "Medium",
+                  "Large",
+                  "X-Large",
+                  "2X-Large",
+                  "3X-Large",
+                  "4X-Large"
+                ]
+              },
+              "min_clusters": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "max_clusters": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "auto_stop_minutes": {
+                "type": "integer",
+                "minimum": 10
+              },
+              "enable_serverless_compute": {
+                "const": false
+              }
+            },
+            "required": [
+              "size",
+              "min_clusters",
+              "max_clusters",
+              "auto_stop_minutes",
+              "enable_serverless_compute"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "version",
+        "environment",
+        "cluster_policies",
+        "sql_warehouses"
+      ],
+      "additionalProperties": false
+    },
+    "persona": {
+      "type": "object",
+      "properties": {
+        "workspace_role": {
+          "enum": [
+            "USER",
+            "ADMIN"
+          ]
+        },
+        "allowed_packages": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+            "maxLength": 63
+          },
+          "uniqueItems": true
+        },
+        "cluster_policies": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+            "maxLength": 63
+          },
+          "uniqueItems": true
+        },
+        "sql_warehouses": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "enum": [
+              "CAN_USE",
+              "CAN_MANAGE"
+            ]
+          }
+        },
+        "entitlements": {
+          "$ref": "#/$defs/entitlements"
+        }
+      },
+      "required": [
+        "workspace_role",
+        "allowed_packages",
+        "cluster_policies",
+        "sql_warehouses",
+        "entitlements"
+      ],
+      "additionalProperties": false
+    },
+    "entitlements": {
+      "type": "object",
+      "properties": {
+        "workspace_access": {
+          "type": "boolean"
+        },
+        "databricks_sql_access": {
+          "type": "boolean"
+        },
+        "allow_cluster_create": {
+          "type": "boolean"
+        },
+        "allow_instance_pool_create": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "workspace_access",
+        "databricks_sql_access"
+      ],
+      "additionalProperties": false
+    },
+    "workload": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "environment": {
+          "const": "dev"
+        },
+        "workspace": {
+          "const": "demo"
+        },
+        "persona": {
+          "enum": [
+            "admins",
+            "engineers",
+            "analysts",
+            "ml"
+          ]
+        },
+        "data_access": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+                    "maxLength": 63
+                  },
+                  "access": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+                    "maxLength": 63
+                  },
+                  "catalog": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*$",
+                    "maxLength": 255
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "id",
+                  "access",
+                  "catalog",
+                  "reason"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+                    "maxLength": 63
+                  },
+                  "access": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+                    "maxLength": 63
+                  },
+                  "catalog": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*$",
+                    "maxLength": 255
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "schema": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*$",
+                    "maxLength": 255
+                  }
+                },
+                "required": [
+                  "id",
+                  "access",
+                  "catalog",
+                  "reason",
+                  "schema"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+                    "maxLength": 63
+                  },
+                  "access": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+                    "maxLength": 63
+                  },
+                  "catalog": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*$",
+                    "maxLength": 255
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "schema": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*$",
+                    "maxLength": 255
+                  },
+                  "table": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*$",
+                    "maxLength": 255
+                  }
+                },
+                "required": [
+                  "id",
+                  "access",
+                  "catalog",
+                  "reason",
+                  "schema",
+                  "table"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "version",
+        "environment",
+        "workspace",
+        "persona",
+        "data_access"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,17 @@
+# Do not use repo:OWNER/REPOSITORY:*; scope each subject to a deployment branch
+# or protected GitHub environment.
+aws_region = "eu-west-1"
+github_subjects = [
+  "repo:mysticrenji@10666267/databricks-platform-engineering@1381968032:ref:refs/heads/main",
+]
+
+# Attach only permissions required by the workflow. For example, reference a
+# custom least-privilege policy created elsewhere in your AWS account.
+managed_policy_arns = [
+  "arn:aws:iam::123456789012:policy/github-actions-deploy",
+]
+
+tags = {
+  ManagedBy = "Terraform"
+  Purpose   = "GitHubActionsOIDC"
+}

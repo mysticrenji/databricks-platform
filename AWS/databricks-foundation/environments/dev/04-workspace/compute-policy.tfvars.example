@@ -1,0 +1,97 @@
+# Load alongside terraform.tfvars:
+# terraform plan -var-file=compute-policy.tfvars.example
+# terraform apply -var-file=compute-policy.tfvars.example
+# This replaces the entire cluster_policies map from other tfvars files.
+# Creates a policy and its permissions, not a running cluster.
+cluster_policies = {
+  "dev-single-node-basic" = {
+    description           = "Single-node AWS development compute; terminates after 20 idle minutes."
+    max_clusters_per_user = 1
+    definition = {
+      "cluster_type" = {
+        type  = "fixed"
+        value = "all-purpose"
+      }
+      "spark_version" = {
+        type  = "fixed"
+        value = "auto:latest-lts"
+      }
+      # General-purpose 4-vCPU / 16-GiB AWS instance.
+      # Confirm m5d.xlarge is offered in the workspace's compute UI.
+      "node_type_id" = {
+        type  = "fixed"
+        value = "m5d.xlarge"
+      }
+      "driver_node_type_id" = {
+        type  = "fixed"
+        value = "m5d.xlarge"
+      }
+      "is_single_node" = {
+        type   = "fixed"
+        value  = true
+        hidden = true
+      }
+      "num_workers" = {
+        type   = "fixed"
+        value  = 0
+        hidden = true
+      }
+      "autoscale.min_workers" = {
+        type   = "forbidden"
+        hidden = true
+      }
+      "autoscale.max_workers" = {
+        type   = "forbidden"
+        hidden = true
+      }
+      "spark_conf.spark.databricks.cluster.profile" = {
+        type   = "fixed"
+        value  = "singleNode"
+        hidden = true
+      }
+      "spark_conf.spark.master" = {
+        type   = "fixed"
+        value  = "local[*]"
+        hidden = true
+      }
+      "custom_tags.ResourceClass" = {
+        type   = "fixed"
+        value  = "SingleNode"
+        hidden = true
+      }
+      "data_security_mode" = {
+        type  = "fixed"
+        value = "SINGLE_USER"
+      }
+      "autotermination_minutes" = {
+        type  = "fixed"
+        value = 20
+      }
+      "aws_attributes.availability" = {
+        type  = "fixed"
+        value = "ON_DEMAND"
+      }
+      "instance_pool_id" = {
+        type   = "forbidden"
+        hidden = true
+      }
+      "driver_instance_pool_id" = {
+        type   = "forbidden"
+        hidden = true
+      }
+      "custom_tags.Project" = {
+        type  = "fixed"
+        value = "databricks"
+      }
+      "custom_tags.Environment" = {
+        type  = "fixed"
+        value = "dev"
+      }
+    }
+    permissions = {
+      groups = {
+        "databricks-dev-admins" = "CAN_USE"
+      }
+    }
+  }
+}

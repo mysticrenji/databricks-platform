@@ -1,0 +1,6 @@
+terraform {
+  required_version = ">= 1.10.0, < 2.0.0"
+
+  backend "s3" {}
+}
+# account-configuration -> workspace; consume 01-infra remote state outputs.

@@ -1,0 +1,127 @@
+name: Environment Terraform root
+on:
+  workflow_call:
+    inputs:
+      root:
+        type: string
+        required: true
+      target_workspace:
+        type: string
+        required: true
+      target_environment:
+        type: string
+        required: true
+      deploy:
+        type: boolean
+        required: true
+      confirm_environment:
+        type: string
+        default: ''
+permissions:
+  contents: read
+  id-token: write
+# Configure <environment>-<workspace>-plan and -apply with the SAME
+# role/account/backend variables. Dev/demo uses the documented single-admin policy;
+# other apply environments retain required reviewers.
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    if: >-
+      !cancelled() && (inputs.target_environment == 'dev' || inputs.target_environment == 'staging') &&
+      (inputs.target_environment != 'dev' || inputs.target_workspace != 'demo' ||
+       (github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'))
+    environment: ${{ inputs.target_environment }}-${{ inputs.target_workspace }}-plan
+    env:
+      EXPECTED_DEPLOYMENT_ROLE_ARN: ${{ vars.AWS_DEPLOYMENT_ROLE_ARN }}
+      DATABRICKS_ACCOUNT_ID: ${{ vars.DATABRICKS_ACCOUNT_ID }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      TF_IN_AUTOMATION: 'true'
+      CONFIG: ${{ vars.ENVIRONMENT_CONFIG_PATH || format('AWS/databricks-foundation/platform/environments/{0}/{1}.yaml', inputs.target_environment, inputs.target_workspace) }}
+      TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+      TARGET_WORKSPACE: ${{ inputs.target_workspace }}
+      STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      STATE_REGION: ${{ vars.TF_STATE_REGION }}
+      INFRA_STATE_KEY: ${{ vars.TF_INFRA_STATE_KEY }}
+      ACCOUNT_STATE_KEY: ${{ vars.TF_ACCOUNT_STATE_KEY }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.12'
+      - run: pip install -r AWS/databricks-foundation/tools/environment/requirements.txt
+      - name: Validate before cloud authentication
+        run: python AWS/databricks-foundation/tools/environment/environment.py validate "$CONFIG"
+      - uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: '1.10.5'
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOYMENT_ROLE_ARN }}
+          aws-region: ${{ vars.TF_STATE_REGION }}
+      - name: Plan selected root
+        env:
+          ROOT: ${{ inputs.root }}
+        run: |
+          python AWS/databricks-foundation/tools/environment/terraform_environment.py plan "$CONFIG" \
+            --root "$ROOT" --state-bucket "$STATE_BUCKET" --state-region "$STATE_REGION" \
+            --infra-state-key "$INFRA_STATE_KEY" --account-state-key "$ACCOUNT_STATE_KEY" --artifacts "$RUNNER_TEMP/environment-plan"
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: environment-${{ inputs.root }}
+          path: ${{ runner.temp }}/environment-plan
+          retention-days: 1
+          if-no-files-found: error
+  apply:
+    if: >-
+      !cancelled() && needs.plan.result == 'success' && inputs.deploy && (inputs.target_environment == 'dev' || inputs.target_environment == 'staging') &&
+      (inputs.target_environment != 'dev' || inputs.target_workspace != 'demo' ||
+       (github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'))
+    needs: plan
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.target_environment }}-${{ inputs.target_workspace }}-apply
+    env:
+      EXPECTED_DEPLOYMENT_ROLE_ARN: ${{ vars.AWS_DEPLOYMENT_ROLE_ARN }}
+      DATABRICKS_ACCOUNT_ID: ${{ vars.DATABRICKS_ACCOUNT_ID }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      TF_IN_AUTOMATION: 'true'
+      CONFIG: ${{ vars.ENVIRONMENT_CONFIG_PATH || format('AWS/databricks-foundation/platform/environments/{0}/{1}.yaml', inputs.target_environment, inputs.target_workspace) }}
+      TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+      TARGET_WORKSPACE: ${{ inputs.target_workspace }}
+      STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      STATE_REGION: ${{ vars.TF_STATE_REGION }}
+      INFRA_STATE_KEY: ${{ vars.TF_INFRA_STATE_KEY }}
+      ACCOUNT_STATE_KEY: ${{ vars.TF_ACCOUNT_STATE_KEY }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.12'
+      - run: pip install -r AWS/databricks-foundation/tools/environment/requirements.txt
+      - uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: '1.10.5'
+          terraform_wrapper: false
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: environment-${{ inputs.root }}
+          path: ${{ runner.temp }}/environment-plan
+      - name: Validate before cloud authentication
+        run: python AWS/databricks-foundation/tools/environment/environment.py validate "$CONFIG"
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOYMENT_ROLE_ARN }}
+          aws-region: ${{ vars.TF_STATE_REGION }}
+      - name: Apply exact saved plan
+        env:
+          ENVIRONMENT_YAML_APPLY_ENABLED: ${{ vars.ENVIRONMENT_YAML_APPLY_ENABLED }}
+          GH_TOKEN: ${{ github.token }}
+          CONFIRM_ENVIRONMENT: ${{ inputs.confirm_environment }}
+          ROOT: ${{ inputs.root }}
+        run: |
+          python AWS/databricks-foundation/tools/environment/terraform_environment.py apply "$CONFIG" \
+            --root "$ROOT" --state-bucket "$STATE_BUCKET" --state-region "$STATE_REGION" \
+            --confirm-environment "$CONFIRM_ENVIRONMENT" \
+            --infra-state-key "$INFRA_STATE_KEY" --account-state-key "$ACCOUNT_STATE_KEY" --artifacts "$RUNNER_TEMP/environment-plan"

@@ -1,0 +1,16 @@
+version: 1
+environment: dev
+workspace: demo
+persona: engineers
+data_access:
+  - id: bronze-write
+    catalog: dev_demo
+    schema: bronze
+    access: writer
+    reason: Maintain bronze ingestion tables
+  - id: sales-summary-read
+    catalog: dev_demo
+    schema: gold
+    table: sales_summary
+    access: reader
+    reason: Validate published sales totals after the application creates the table

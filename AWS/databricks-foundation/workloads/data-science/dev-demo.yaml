@@ -1,0 +1,15 @@
+version: 1
+environment: dev
+workspace: demo
+persona: ml
+data_access:
+  - id: training-data-read
+    catalog: dev_demo
+    schema: gold
+    access: reader
+    reason: Read curated training data
+  - id: ml-write
+    catalog: dev_demo
+    schema: ml
+    access: writer
+    reason: Maintain ML preparation and experiment tables

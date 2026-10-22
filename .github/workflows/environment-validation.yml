@@ -1,0 +1,118 @@
+name: Validate Databricks platform
+on:
+  pull_request:
+    paths:
+      - 'AWS/databricks-foundation/**'
+      - '.github/workflows/**'
+  push:
+    branches: [main]
+    paths:
+      - 'AWS/databricks-foundation/**'
+      - '.github/workflows/**'
+permissions:
+  contents: read
+concurrency:
+  group: platform-validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.12'
+      - run: pip install -r AWS/databricks-foundation/tools/environment/requirements.txt
+      - name: Test valid and invalid configurations
+        run: python -m unittest discover -s AWS/databricks-foundation/tools/environment/tests -v
+      - name: Validate access and render the feature matrix without credentials
+        run: |
+          python -m unittest discover -s AWS/databricks-foundation/tools/databricks-access/tests -v
+          python AWS/databricks-foundation/tools/databricks-access/terraform_entitlements.py render --environment dev --workspace demo --artifacts "$RUNNER_TEMP/workspace-access-inputs"
+      - name: Validate and preview dev/demo access without credentials
+        run: |
+          python AWS/databricks-foundation/tools/databricks-access/access.py validate --environment dev --workspace demo
+          python AWS/databricks-foundation/tools/databricks-access/access.py preview --environment dev --workspace demo
+      - name: Render permissions and persona compute without credentials
+        run: |
+          python AWS/databricks-foundation/tools/databricks-access/terraform_permissions.py render --artifacts "$RUNNER_TEMP/permissions-inputs"
+          python AWS/databricks-foundation/tools/databricks-access/terraform_compute.py render --environment dev --workspace demo --artifacts "$RUNNER_TEMP/compute-inputs"
+      - name: Validate development and staging environment configuration
+        shell: bash
+        run: |
+          for config in AWS/databricks-foundation/platform/environments/{dev,staging}/*.yaml; do
+            python AWS/databricks-foundation/tools/environment/environment.py validate "$config" --example
+          done
+      - uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: '1.10.5'
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive .
+      - name: Validate existing Terraform roots without backend access
+        shell: bash
+        run: |
+          for root in 01-infra 02-account; do
+            terraform -chdir="AWS/databricks-foundation/environments/dev/$root" init -backend=false -input=false -lockfile=readonly
+            terraform -chdir="AWS/databricks-foundation/environments/dev/$root" validate
+          done
+      - name: Test workspace group bootstrap without credentials
+        shell: bash
+        run: |
+          terraform -chdir="AWS/databricks-foundation/modules/databricks/account-groups" init -backend=false -input=false -lockfile=readonly
+          terraform -chdir="AWS/databricks-foundation/modules/databricks/account-groups" test
+          terraform -chdir="AWS/databricks-foundation/environments/dev/02-account" test
+      - name: Test workspace feature matrix without credentials
+        shell: bash
+        run: |
+          for root in modules/databricks/workspace-entitlements environments/dev/02-workspace-access; do
+            terraform -chdir="AWS/databricks-foundation/$root" init -backend=false -input=false -lockfile=readonly
+            if [[ "$root" == environments/dev/02-workspace-access ]]; then
+              terraform -chdir="AWS/databricks-foundation/$root" validate
+            fi
+            terraform -chdir="AWS/databricks-foundation/$root" test
+          done
+  terraform-permissions:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        directory:
+          - modules/databricks/workspace-access
+          - modules/databricks/uc-permissions
+          - environments/dev/05-permissions
+          - modules/databricks/cluster-policies
+          - modules/databricks/sql-warehouses
+          - environments/dev/04-workspace
+    defaults:
+      run:
+        working-directory: AWS/databricks-foundation/${{ matrix.directory }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: '1.10.5'
+          terraform_wrapper: false
+      - run: terraform init -backend=false -input=false -lockfile=readonly
+      - run: terraform validate
+        if: matrix.directory == 'environments/dev/05-permissions' || matrix.directory == 'environments/dev/04-workspace'
+      - run: terraform test -no-color
+      - uses: actions/setup-python@v7.0.0
+        if: matrix.directory == 'environments/dev/05-permissions' || matrix.directory == 'environments/dev/04-workspace'
+        with:
+          python-version: '3.12'
+      - name: Exercise generated YAML inputs through mocked Terraform
+        if: matrix.directory == 'environments/dev/05-permissions'
+        run: |
+          pip install -r ../../../tools/databricks-access/requirements.txt
+          python ../../../tools/databricks-access/terraform_permissions.py render --artifacts "$RUNNER_TEMP/permissions-inputs"
+          terraform test -no-color -test-directory=generated-tests -var-file="$RUNNER_TEMP/permissions-inputs/permissions.tfvars.json"
+      - name: Exercise generated persona compute inputs through mocked Terraform
+        if: matrix.directory == 'environments/dev/04-workspace'
+        run: |
+          pip install -r ../../../tools/databricks-access/requirements.txt
+          python ../../../tools/databricks-access/terraform_compute.py render --environment dev --workspace demo --artifacts "$RUNNER_TEMP/compute-inputs"
+          terraform test -no-color -test-directory=generated-tests -var-file="$RUNNER_TEMP/compute-inputs/compute.tfvars.json"

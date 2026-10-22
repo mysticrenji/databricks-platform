@@ -1,0 +1,40 @@
+default_stages: [pre-commit]
+fail_fast: false
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-json
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.7
+    hooks:
+      - id: actionlint
+
+  - repo: local
+    hooks:
+      - id: terraform-format
+        name: Terraform formatting
+        entry: terraform fmt -check -recursive AWS/databricks-foundation
+        language: system
+        pass_filenames: false
+        files: ^AWS/databricks-foundation/.*\.tf$
+
+      - id: terraform-lint
+        name: Terraform lint
+        entry: tflint --recursive
+        language: system
+        pass_filenames: false
+        files: ^AWS/databricks-foundation/.*\.tf$
+
+      - id: foundation-python-tests
+        name: Foundation Python tests
+        entry: bash -c 'cd AWS/databricks-foundation && python3 -m unittest discover -s tools/environment/tests -v && python3 -m unittest discover -s tools/databricks-access/tests -v'
+        language: system
+        pass_filenames: false
+        files: ^AWS/databricks-foundation/(tools/.*\.py|platform/.*\.(yaml|yml|json)|workloads/.*\.(yaml|yml)|environments/.*\.(tf|hcl|json)|modules/.*\.(tf|hcl|json))$

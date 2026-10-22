@@ -1,0 +1,10 @@
+# Workspace outputs: provisioning run 38941131929; metastore: live check 38959638081.
+# Active permits read-only planning. Apply still requires its separate CI opt-in and approval.
+version: 1
+environment: dev
+workspace: demo
+account_id: 8b5bd854-c914-4d19-9a51-8d6781d93ce6
+workspace_id: "7474651078160980"
+workspace_url: https://dbc-ba25311d-9df4.cloud.databricks.com
+metastore_id: 7c9f7311-9f03-4543-8721-31239de1c73e
+active: true

@@ -1,0 +1,50 @@
+version: 1
+packages:
+  reader:
+    catalog: [USE_CATALOG]
+    schema: [USE_SCHEMA, SELECT]
+    table: [SELECT]
+  writer:
+    schema: [USE_SCHEMA, SELECT, MODIFY, CREATE_TABLE]
+    table: [SELECT, MODIFY]
+personas:
+  admins:
+    workspace_role: ADMIN
+    allowed_packages: []
+    cluster_policies: []
+    sql_warehouses: {analytics: CAN_MANAGE}
+    entitlements:
+      workspace_access: true
+      databricks_sql_access: true
+      allow_cluster_create: true
+      allow_instance_pool_create: true
+  engineers:
+    workspace_role: USER
+    allowed_packages: [reader, writer]
+    cluster_policies: [engineering-standard]
+    sql_warehouses: {analytics: CAN_USE}
+    entitlements:
+      workspace_access: true
+      databricks_sql_access: true
+      allow_cluster_create: false
+      allow_instance_pool_create: false
+  analysts:
+    workspace_role: USER
+    allowed_packages: [reader]
+    cluster_policies: []
+    sql_warehouses: {analytics: CAN_USE}
+    entitlements:
+      workspace_access: false
+      databricks_sql_access: true
+      allow_cluster_create: false
+      allow_instance_pool_create: false
+  ml:
+    workspace_role: USER
+    allowed_packages: [reader, writer]
+    cluster_policies: [ml-standard]
+    sql_warehouses: {analytics: CAN_USE}
+    entitlements:
+      workspace_access: true
+      databricks_sql_access: true
+      allow_cluster_create: false
+      allow_instance_pool_create: false

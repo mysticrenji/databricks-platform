@@ -1,0 +1,21 @@
+version: 1
+environment: dev
+workspace: demo
+datasets:
+  dev_demo:
+    approval_owner: analytics-data-owners
+    schemas:
+      bronze: {allowed_packages: [reader, writer]}
+      silver: {allowed_packages: [reader, writer]}
+      gold: {allowed_packages: [reader]}
+      ml: {allowed_packages: [reader, writer]}
+workloads:
+  data-engineering:
+    principal: engineers
+    allowed_catalogs: [dev_demo]
+  data-analytics:
+    principal: analysts
+    allowed_catalogs: [dev_demo]
+  data-science:
+    principal: ml
+    allowed_catalogs: [dev_demo]

@@ -1,0 +1,159 @@
+name: Deprovision Terraform root
+on:
+  workflow_call:
+    inputs:
+      root:
+        type: string
+        required: true
+      target_workspace:
+        type: string
+        required: true
+      target_environment:
+        type: string
+        required: true
+      execute_destroy:
+        type: boolean
+        required: true
+      purge_storage:
+        type: boolean
+        default: false
+      confirm_purge_storage:
+        type: string
+        default: ''
+      confirm_environment:
+        type: string
+        required: true
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  preview:
+    if: >-
+      !cancelled() && (inputs.target_environment == 'dev' || inputs.target_environment == 'staging') &&
+      (inputs.target_environment != 'dev' || inputs.target_workspace != 'demo' || (github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'))
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.target_environment }}-${{ inputs.target_workspace }}-plan
+    env:
+      CONFIG: ${{ vars.ENVIRONMENT_CONFIG_PATH || format('AWS/databricks-foundation/platform/environments/{0}/{1}.yaml', inputs.target_environment, inputs.target_workspace) }}
+      TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+      TARGET_WORKSPACE: ${{ inputs.target_workspace }}
+      EXPECTED_DEPLOYMENT_ROLE_ARN: ${{ vars.AWS_DEPLOYMENT_ROLE_ARN }}
+      DATABRICKS_ACCOUNT_ID: ${{ vars.DATABRICKS_ACCOUNT_ID }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      TF_IN_AUTOMATION: 'true'
+      STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      STATE_REGION: ${{ vars.TF_STATE_REGION }}
+      INFRA_STATE_KEY: ${{ vars.TF_INFRA_STATE_KEY }}
+      ACCOUNT_STATE_KEY: ${{ vars.TF_ACCOUNT_STATE_KEY }}
+      DATA_ACCESS_STATE_KEY: ${{ vars.TF_DATA_ACCESS_STATE_KEY }}
+      WORKSPACE_STATE_KEY: ${{ vars.TF_WORKSPACE_STATE_KEY }}
+      ROOT: ${{ inputs.root }}
+      EXECUTE_DESTROY: ${{ inputs.execute_destroy }}
+      CONFIRM_ENVIRONMENT: ${{ inputs.confirm_environment }}
+      PURGE_STORAGE: ${{ inputs.purge_storage }}
+      CONFIRM_PURGE_STORAGE: ${{ inputs.confirm_purge_storage }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Validate execution confirmation
+        shell: bash
+        run: |
+          if [[ "$EXECUTE_DESTROY" == true && "$CONFIRM_ENVIRONMENT" != "$TARGET_ENVIRONMENT/$TARGET_WORKSPACE" ]]; then
+            echo 'Confirmation must match environment/workspace (for example dev/sandbox).' >&2
+            exit 1
+          fi
+          if [[ "$EXECUTE_DESTROY" == true && "$PURGE_STORAGE" == true && "$CONFIRM_PURGE_STORAGE" != "$TARGET_ENVIRONMENT/$TARGET_WORKSPACE" ]]; then
+            echo 'Permanent storage deletion requires a separate matching confirmation.' >&2
+            exit 1
+          fi
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.12'
+      - run: pip install -r AWS/databricks-foundation/tools/environment/requirements-storage.txt
+      - name: Validate YAML before authentication
+        run: python AWS/databricks-foundation/tools/environment/environment.py validate "$CONFIG"
+      - uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: '1.10.5'
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOYMENT_ROLE_ARN }}
+          aws-region: ${{ vars.TF_STATE_REGION }}
+      - name: Preview destroy and optional permanent storage purge using a local state copy
+        run: |
+          storage_args=()
+          if [[ "$PURGE_STORAGE" == true ]]; then
+            storage_args+=(--purge-storage --confirm-purge-storage "$CONFIRM_PURGE_STORAGE")
+          fi
+          python AWS/databricks-foundation/tools/environment/deprovision_environment.py preview "$CONFIG" \
+            --root "$ROOT" --state-bucket "$STATE_BUCKET" --state-region "$STATE_REGION" \
+            --infra-state-key "$INFRA_STATE_KEY" --account-state-key "$ACCOUNT_STATE_KEY" \
+            --data-access-state-key "$DATA_ACCESS_STATE_KEY" --workspace-state-key "$WORKSPACE_STATE_KEY" \
+            --artifacts "$RUNNER_TEMP/destroy-preview" "${storage_args[@]}"
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: destroy-${{ inputs.root }}
+          path: ${{ runner.temp }}/destroy-preview
+          retention-days: 1
+          if-no-files-found: error
+  destroy:
+    if: >-
+      !cancelled() && needs.preview.result == 'success' && inputs.execute_destroy && inputs.confirm_environment == format('{0}/{1}', inputs.target_environment, inputs.target_workspace) &&
+      (inputs.target_environment == 'dev' || inputs.target_environment == 'staging') &&
+      (inputs.target_environment != 'dev' || inputs.target_workspace != 'demo' || (github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'))
+    needs: preview
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.target_environment }}-${{ inputs.target_workspace }}-apply
+    env:
+      CONFIG: ${{ vars.ENVIRONMENT_CONFIG_PATH || format('AWS/databricks-foundation/platform/environments/{0}/{1}.yaml', inputs.target_environment, inputs.target_workspace) }}
+      TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+      TARGET_WORKSPACE: ${{ inputs.target_workspace }}
+      EXPECTED_DEPLOYMENT_ROLE_ARN: ${{ vars.AWS_DEPLOYMENT_ROLE_ARN }}
+      DATABRICKS_ACCOUNT_ID: ${{ vars.DATABRICKS_ACCOUNT_ID }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      ENVIRONMENT_YAML_DESTROY_ENABLED: ${{ vars.ENVIRONMENT_YAML_DESTROY_ENABLED }}
+      GH_TOKEN: ${{ github.token }}
+      TF_IN_AUTOMATION: 'true'
+      STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      STATE_REGION: ${{ vars.TF_STATE_REGION }}
+      INFRA_STATE_KEY: ${{ vars.TF_INFRA_STATE_KEY }}
+      ACCOUNT_STATE_KEY: ${{ vars.TF_ACCOUNT_STATE_KEY }}
+      DATA_ACCESS_STATE_KEY: ${{ vars.TF_DATA_ACCESS_STATE_KEY }}
+      WORKSPACE_STATE_KEY: ${{ vars.TF_WORKSPACE_STATE_KEY }}
+      ROOT: ${{ inputs.root }}
+      CONFIRM_ENVIRONMENT: ${{ inputs.confirm_environment }}
+      PURGE_STORAGE: ${{ inputs.purge_storage }}
+      CONFIRM_PURGE_STORAGE: ${{ inputs.confirm_purge_storage }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.12'
+      - run: pip install -r AWS/databricks-foundation/tools/environment/requirements-storage.txt
+      - uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: '1.10.5'
+          terraform_wrapper: false
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: destroy-${{ inputs.root }}
+          path: ${{ runner.temp }}/destroy-preview
+      - name: Validate YAML before authentication
+        run: python AWS/databricks-foundation/tools/environment/environment.py validate "$CONFIG"
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOYMENT_ROLE_ARN }}
+          aws-region: ${{ vars.TF_STATE_REGION }}
+      - name: Verify execution policy, destroy root and optionally purge reviewed workspace storage
+        run: |
+          storage_args=()
+          if [[ "$PURGE_STORAGE" == true ]]; then
+            storage_args+=(--purge-storage --confirm-purge-storage "$CONFIRM_PURGE_STORAGE")
+          fi
+          python AWS/databricks-foundation/tools/environment/deprovision_environment.py destroy "$CONFIG" \
+            --root "$ROOT" --state-bucket "$STATE_BUCKET" --state-region "$STATE_REGION" \
+            --infra-state-key "$INFRA_STATE_KEY" --account-state-key "$ACCOUNT_STATE_KEY" \
+            --data-access-state-key "$DATA_ACCESS_STATE_KEY" --workspace-state-key "$WORKSPACE_STATE_KEY" \
+            --confirm-environment "$CONFIRM_ENVIRONMENT" --artifacts "$RUNNER_TEMP/destroy-preview" "${storage_args[@]}"

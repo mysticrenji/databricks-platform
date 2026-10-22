@@ -1,0 +1,20 @@
+# Terraform working directories and local state/plan files.
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# Keep example inputs tracked; real inputs may contain environment-specific secrets.
+*.tfvars
+*.tfvars.json
+
+# Local S3 backend configuration.
+backend.hcl
+
+# Python tooling and environment adapter artifacts.
+__pycache__/
+*.pyc
+.venv/
+./platform/environments/dev/dev-workspace.yaml

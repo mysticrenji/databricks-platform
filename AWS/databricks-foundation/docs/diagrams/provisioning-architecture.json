@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Databricks on AWS provisioning flow",
+    "quality_profile": "showcase",
+    "viewBox": [1390, 760]
+  },
+  "components": [
+    { "id": "operator", "type": "external", "label": "Platform administrator", "sublabel": "manual run from main", "pos": [36, 330], "size": [156, 66] },
+    { "id": "github", "type": "backend", "label": "GitHub Actions", "sublabel": "saved plan + explicit opt-in", "pos": [250, 330], "size": [172, 66], "brand": "github" },
+    { "id": "oidc", "type": "security", "label": "GitHub OIDC", "sublabel": "short-lived AWS credentials", "pos": [480, 330], "size": [166, 66], "brand": "github" },
+    { "id": "infra", "type": "cloud", "label": "01-infra", "sublabel": "VPC, IAM, S3, networking", "pos": [710, 188], "size": [166, 66] },
+    { "id": "account", "type": "cloud", "label": "02-account", "sublabel": "workspace + account groups", "pos": [940, 188], "size": [170, 66], "brand": "databricks" },
+    { "id": "workspace", "type": "cloud", "label": "Databricks workspace", "sublabel": "identity-federated workspace", "pos": [1170, 188], "size": [182, 66], "brand": "databricks" },
+    { "id": "entitlements", "type": "security", "label": "02-workspace-access", "sublabel": "persona entitlements", "pos": [940, 472], "size": [184, 66], "brand": "databricks" },
+    { "id": "dataaccess", "type": "database", "label": "03-data-access", "sublabel": "Unity Catalog storage + data", "pos": [1170, 472], "size": [182, 66], "brand": "databricks" },
+    { "id": "compute", "type": "backend", "label": "04-workspace compute", "sublabel": "policies + SQL warehouse ACLs", "pos": [940, 612], "size": [184, 66], "brand": "databricks" },
+    { "id": "permissions", "type": "security", "label": "05-permissions", "sublabel": "grants on existing data", "pos": [1170, 612], "size": [182, 66], "brand": "databricks" }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "AWS account and selected region", "wraps": ["infra"], "pad": 24 },
+    { "kind": "region", "label": "Databricks account", "wraps": ["account", "workspace", "entitlements", "dataaccess", "compute", "permissions"], "pad": 28 }
+  ],
+  "connections": [
+    { "from": "operator", "to": "github", "label": "workflow dispatch", "variant": "emphasis", "labelDy": -30 },
+    { "from": "github", "to": "oidc", "label": "request identity", "variant": "security", "labelDy": -30 },
+    { "from": "oidc", "to": "infra", "label": "assume AWS deployment role", "variant": "security", "route": "orthogonal-h", "labelAt": [650, 270] },
+    { "from": "infra", "to": "account", "label": "AWS outputs", "variant": "emphasis", "labelAt": [908, 282] },
+    { "from": "account", "to": "workspace", "label": "create workspace", "variant": "emphasis", "labelDy": -30 },
+    { "from": "account", "to": "entitlements", "label": "workspace + group IDs", "variant": "security", "route": "orthogonal-v", "labelAt": [1075, 340] },
+    { "from": "workspace", "to": "dataaccess", "label": "workspace output", "route": "straight", "labelAt": [1360, 340] },
+    { "from": "entitlements", "to": "compute", "label": "verified persona matrix", "variant": "security", "route": "straight", "labelAt": [1075, 555] },
+    { "from": "dataaccess", "to": "permissions", "label": "existing securables", "variant": "emphasis", "route": "straight", "labelAt": [1360, 555] }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Deployment controls", "items": ["GitHub runs a saved Terraform plan before apply", "Dev/demo requires a manual main-branch run, explicit opt-in, and exact confirmation", "OIDC avoids stored AWS access keys"] },
+    { "dot": "emerald", "title": "State and ownership", "items": ["Each root has separate Terraform state", "01 owns AWS, 02 owns workspace identity, 03 owns data objects, 04 owns compute, 05 owns data grants", "Group membership stays outside this workflow"] },
+    { "dot": "amber", "title": "Important dependency", "items": ["Compute follows workspace entitlements", "Data-access and permissions are separate paths", "A Terraform-managed warehouse can create billable compute when started"] }
+  ]
+}

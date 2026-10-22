@@ -1,0 +1,21 @@
+state_bucket = "REPLACE_WITH_TERRAFORM_STATE_BUCKET"
+state_region = "eu-central-1"
+infra_state_key = "databricks/dev/shared/01-infra.tfstate"
+account_state_key = "databricks/dev/shared/02-account.tfstate"
+
+
+# Declare only the identities and resources this state should own.
+groups = {}
+service_principals = {}
+register_infra_instance_profile = false
+instance_profile_group_names = []
+
+cluster_policies = {}
+warehouses = {}
+jobs = {}
+# Enable only after the operations volume exists in 03-data-access.
+cluster_log_volume_path = null
+# Existing UC volume/file path; enable upload below to use the bundled demo.
+init_script_volume_path = null
+enable_hello_world_init_script = false
+data_access_state_key = "databricks/dev/shared/03-data-access.tfstate"

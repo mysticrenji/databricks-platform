@@ -1,0 +1,174 @@
+name: Databricks permissions and diagnostics
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Plan permissions or run read-only AWS and Databricks diagnostics
+        type: choice
+        options: [plan, diagnostics]
+        default: plan
+      deploy:
+        description: Apply the exact saved plan after protected environment approval (main only)
+        type: boolean
+        default: false
+      workspace_id:
+        description: Current dev/demo provisioning workspace ID (diagnostics only)
+        type: string
+        default: ''
+      workspace_url:
+        description: Current dev/demo provisioning workspace URL (diagnostics only)
+        type: string
+        default: ''
+      check_metastore:
+        description: Also verify metastore assignment and summary visibility (diagnostics only)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+concurrency:
+  group: databricks-environment-dev-demo
+  cancel-in-progress: false
+jobs:
+  diagnostics:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == 'diagnostics'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: dev-demo-plan
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check diagnostic inputs
+        env:
+          WORKSPACE_ID: ${{ inputs.workspace_id }}
+          WORKSPACE_URL: ${{ inputs.workspace_url }}
+          DEPLOY: ${{ inputs.deploy }}
+        run: |
+          if [[ -z "$WORKSPACE_ID" || -z "$WORKSPACE_URL" || "$DEPLOY" == true ]]; then
+            echo 'Diagnostics require current provisioning workspace_id/workspace_url and deploy=false.' >&2
+            exit 1
+          fi
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.12'
+      - run: pip install -r AWS/databricks-foundation/tools/databricks-access/requirements-live.txt
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOYMENT_ROLE_ARN }}
+          aws-region: ${{ vars.TF_STATE_REGION }}
+      - name: Verify deployment role identity via OIDC (read-only)
+        run: aws sts get-caller-identity
+      - name: Verify current workspace identity and optional metastore (read-only)
+        env:
+          DATABRICKS_ACCOUNT_ID: ${{ vars.DATABRICKS_ACCOUNT_ID }}
+          DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+          WORKSPACE_ID: ${{ inputs.workspace_id }}
+          WORKSPACE_URL: ${{ inputs.workspace_url }}
+          CHECK_METASTORE: ${{ inputs.check_metastore }}
+        run: |
+          args=()
+          if [[ "$CHECK_METASTORE" == true ]]; then args+=(--check-metastore); fi
+          python AWS/databricks-foundation/tools/databricks-access/identity_check.py \
+            --workspace-id "$WORKSPACE_ID" --workspace-url "$WORKSPACE_URL" "${args[@]}"
+  plan:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == 'plan'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: dev-demo-plan
+    env:
+      EXPECTED_DEPLOYMENT_ROLE_ARN: ${{ vars.AWS_DEPLOYMENT_ROLE_ARN }}
+      STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      STATE_REGION: ${{ vars.TF_STATE_REGION }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.12'
+      - run: pip install -r AWS/databricks-foundation/tools/databricks-access/requirements-live.txt
+      - name: Validate and render without credentials
+        run: |
+          python -m unittest discover -s AWS/databricks-foundation/tools/databricks-access/tests -v
+          python AWS/databricks-foundation/tools/databricks-access/terraform_permissions.py render --artifacts "$RUNNER_TEMP/rendered-permissions"
+      - name: Inspect apply approval protection (read-only)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/environments/dev-demo-apply" \
+            --jq '{admin_bypass: .can_admins_bypass, approval_rules: [.protection_rules[] | select(.type == "required_reviewers") | {reviewer_count: (.reviewers | length), prevent_self_review: .prevent_self_review}]}'
+      - uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: '1.10.5'
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOYMENT_ROLE_ARN }}
+          aws-region: ${{ vars.TF_STATE_REGION }}
+      - name: Verify existing objects and plan permissions only
+        env:
+          DATABRICKS_ACCOUNT_ID: ${{ vars.DATABRICKS_ACCOUNT_ID }}
+          DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+          DATABRICKS_AUTH_TYPE: oauth-m2m
+          TF_IN_AUTOMATION: 'true'
+        run: |
+          python AWS/databricks-foundation/tools/databricks-access/terraform_permissions.py plan \
+            --state-bucket "$STATE_BUCKET" --state-region "$STATE_REGION" --artifacts "$RUNNER_TEMP/permissions-plan"
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: dev-demo-permissions-plan
+          path: |
+            ${{ runner.temp }}/permissions-plan/terraform.tfplan
+            ${{ runner.temp }}/permissions-plan/manifest.json
+          retention-days: 1
+          if-no-files-found: error
+  apply:
+    needs: plan
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'plan' && inputs.deploy && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: dev-demo-apply
+    env:
+      EXPECTED_DEPLOYMENT_ROLE_ARN: ${{ vars.AWS_DEPLOYMENT_ROLE_ARN }}
+      STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      STATE_REGION: ${{ vars.TF_STATE_REGION }}
+      DATABRICKS_PERMISSIONS_APPLY_ENABLED: ${{ vars.DATABRICKS_PERMISSIONS_APPLY_ENABLED }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.12'
+      - run: pip install -r AWS/databricks-foundation/tools/databricks-access/requirements-live.txt
+      - name: Verify actual environment approval protection and opt-in
+        run: |
+          cd AWS/databricks-foundation/tools/databricks-access
+          python -c 'from terraform_permissions import require_apply_gate; require_apply_gate("dev-demo-apply")'
+      - uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: '1.10.5'
+          terraform_wrapper: false
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: dev-demo-permissions-plan
+          path: ${{ runner.temp }}/permissions-plan
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOYMENT_ROLE_ARN }}
+          aws-region: ${{ vars.TF_STATE_REGION }}
+      - name: Recheck identity and apply exact saved plan
+        env:
+          DATABRICKS_ACCOUNT_ID: ${{ vars.DATABRICKS_ACCOUNT_ID }}
+          DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+          DATABRICKS_AUTH_TYPE: oauth-m2m
+          TF_IN_AUTOMATION: 'true'
+        run: |
+          python AWS/databricks-foundation/tools/databricks-access/terraform_permissions.py apply \
+            --state-bucket "$STATE_BUCKET" --state-region "$STATE_REGION" --artifacts "$RUNNER_TEMP/permissions-plan"

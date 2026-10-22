@@ -1,0 +1,101 @@
+name: Provision environment YAML
+on:
+  workflow_dispatch:
+    inputs:
+      target_workspace:
+        description: Workspace identifier within the environment (for example shared or sandbox)
+        type: string
+        default: shared
+        required: true
+      target_environment:
+        description: Development or staging workspace to provision
+        type: choice
+        options: [dev, staging]
+        default: dev
+      deploy:
+        description: Apply saved plans (dev/demo uses single-admin confirmation)
+        type: boolean
+        default: false
+      confirm_environment:
+        description: 'For dev/demo deployment, type dev/demo to confirm the target'
+        type: string
+        default: ''
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+concurrency:
+  group: databricks-environment-${{ inputs.target_environment }}-${{ inputs.target_workspace }}
+  cancel-in-progress: false
+jobs:
+  approval_preflight:
+    if: inputs.deploy && github.ref == 'refs/heads/main' && inputs.target_environment == 'dev' && inputs.target_workspace == 'demo'
+    environment: dev-demo-apply
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.12'
+      - run: pip install -r AWS/databricks-foundation/tools/databricks-access/requirements.txt
+      - name: Verify single-admin demo policy before provisioning resources
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ENVIRONMENT_YAML_APPLY_ENABLED: ${{ vars.ENVIRONMENT_YAML_APPLY_ENABLED }}
+          CONFIRM_ENVIRONMENT: ${{ inputs.confirm_environment }}
+        run: |
+          python AWS/databricks-foundation/tools/databricks-access/terraform_entitlements.py check-approval \
+            --environment dev --workspace demo --confirm-environment "$CONFIRM_ENVIRONMENT" --artifacts "$RUNNER_TEMP/approval-preflight"
+  infra:
+    needs: approval_preflight
+    if: >-
+      !cancelled() &&
+      (needs.approval_preflight.result == 'success' || needs.approval_preflight.result == 'skipped') &&
+      (inputs.target_environment != 'dev' || inputs.target_workspace != 'demo' || github.ref == 'refs/heads/main')
+    uses: ./.github/workflows/environment-root.yml
+    with:
+      root: 01-infra
+      target_environment: ${{ inputs.target_environment }}
+      target_workspace: ${{ inputs.target_workspace }}
+      deploy: ${{ inputs.deploy }}
+      confirm_environment: ${{ inputs.confirm_environment }}
+    secrets: inherit
+  account:
+    needs: infra
+    if: ${{ !cancelled() && needs.infra.result == 'success' }}
+    uses: ./.github/workflows/environment-root.yml
+    with:
+      root: 02-account
+      target_environment: ${{ inputs.target_environment }}
+      target_workspace: ${{ inputs.target_workspace }}
+      deploy: ${{ inputs.deploy }}
+      confirm_environment: ${{ inputs.confirm_environment }}
+    secrets: inherit
+  workspace_access:
+    needs: account
+    if: >-
+      !cancelled() && needs.account.result == 'success' &&
+      github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.target_environment == 'dev' && inputs.target_workspace == 'demo'
+    uses: ./.github/workflows/environment-workspace-access.yml
+    with:
+      target_environment: ${{ inputs.target_environment }}
+      target_workspace: ${{ inputs.target_workspace }}
+      deploy: ${{ inputs.deploy }}
+      confirm_environment: ${{ inputs.confirm_environment }}
+    secrets: inherit
+  workspace_compute:
+    needs: workspace_access
+    if: >-
+      !cancelled() && needs.workspace_access.result == 'success' &&
+      github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' &&
+      inputs.target_environment == 'dev' && inputs.target_workspace == 'demo'
+    uses: ./.github/workflows/environment-compute.yml
+    with:
+      target_environment: ${{ inputs.target_environment }}
+      target_workspace: ${{ inputs.target_workspace }}
+      deploy: ${{ inputs.deploy }}
+      confirm_environment: ${{ inputs.confirm_environment }}
+    secrets: inherit

@@ -1,0 +1,226 @@
+{
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 2
+    },
+    "environment": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": ["dev", "staging", "production"]
+        },
+        "aws_account_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[0-9]{12}$"
+        },
+        "aws_region": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deployment_role_arn": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "name",
+        "aws_account_id",
+        "aws_region",
+        "deployment_role_arn"
+      ],
+      "additionalProperties": false
+    },
+    "workspace": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 16,
+          "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+        }
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    },
+    "databricks": {
+      "type": "object",
+      "properties": {
+        "account_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "pricing_tier": {
+          "type": "string",
+          "enum": [
+            "PREMIUM",
+            "ENTERPRISE"
+          ]
+        }
+      },
+      "required": [
+        "account_id",
+        "pricing_tier"
+      ],
+      "additionalProperties": false
+    },
+    "network": {
+      "type": "object",
+      "properties": {
+        "nat_gateway_mode": {
+          "type": "string",
+          "enum": [
+            "single",
+            "per_az"
+          ]
+        },
+        "vpc_cidr": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workspace_subnets": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "availability_zone": {
+                "type": "string",
+                "minLength": 1
+              },
+              "cidr_block": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "availability_zone",
+              "cidr_block"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "nat_subnets": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "availability_zone": {
+                "type": "string",
+                "minLength": 1
+              },
+              "cidr_block": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "availability_zone",
+              "cidr_block"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "endpoint_subnets": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "availability_zone": {
+                "type": "string",
+                "minLength": 1
+              },
+              "cidr_block": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "availability_zone",
+              "cidr_block"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "workspace_subnet_nat_gateway_keys": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "nat_gateway_mode",
+        "vpc_cidr",
+        "workspace_subnets",
+        "nat_subnets",
+        "endpoint_subnets",
+        "workspace_subnet_nat_gateway_keys"
+      ],
+      "additionalProperties": false
+    },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "workspace_bucket_name": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "workspace_bucket_name"
+      ],
+      "additionalProperties": false
+    },
+    "features": {
+      "type": "object",
+      "properties": {
+        "customer_managed_kms": {
+          "type": "boolean"
+        },
+        "observability": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "customer_managed_kms",
+        "observability"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "version",
+    "environment",
+    "workspace",
+    "databricks",
+    "network",
+    "storage",
+    "features"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

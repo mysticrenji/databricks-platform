@@ -1,0 +1,8 @@
+version: 1
+environment: dev
+workspace: demo
+groups:
+  admins: {display_name: dev-demo-admins, persona: admins, lifecycle: terraform}
+  engineers: {display_name: dev-demo-engineers, persona: engineers, lifecycle: terraform}
+  analysts: {display_name: dev-demo-analysts, persona: analysts, lifecycle: terraform}
+  ml: {display_name: dev-demo-ml, persona: ml, lifecycle: terraform}

@@ -1,0 +1,37 @@
+# Terraform working directories, state, plans, and crash logs.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# Local Terraform inputs and backend settings. Keep tracked examples with an
+# explicit .example suffix.
+*.tfvars
+*.tfvars.json
+backend.hcl
+
+# Credentials and local environment files.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python virtual environments, caches, and test output.
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Pre-commit, editor, and operating-system files.
+.pre-commit-cache/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

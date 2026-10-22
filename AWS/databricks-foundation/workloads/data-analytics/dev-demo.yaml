@@ -1,0 +1,10 @@
+version: 1
+environment: dev
+workspace: demo
+persona: analysts
+data_access:
+  - id: gold-read
+    catalog: dev_demo
+    schema: gold
+    access: reader
+    reason: Query published analytics datasets

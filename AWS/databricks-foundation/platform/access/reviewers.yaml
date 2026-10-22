@@ -1,0 +1,6 @@
+# Pilot review routing only; this file does not configure/enforce GitHub reviews.
+# Apply additionally requires a protected environment with self-review disabled.
+version: 1
+platform_reviewers: [mysticrenji]
+data_owners:
+  analytics-data-owners: [mysticrenji]

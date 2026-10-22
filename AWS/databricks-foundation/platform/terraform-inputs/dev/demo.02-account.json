@@ -1,0 +1,8 @@
+{
+  "account_groups": {
+    "dev-demo-admins": {"workspace_permission": "ADMIN", "member_ids": {}},
+    "dev-demo-engineers": {"workspace_permission": "USER", "member_ids": {}},
+    "dev-demo-analysts": {"workspace_permission": "USER", "member_ids": {}},
+    "dev-demo-ml": {"workspace_permission": "USER", "member_ids": {}}
+  }
+}
